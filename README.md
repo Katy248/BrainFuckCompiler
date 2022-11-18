@@ -1,3 +1,3 @@
 # BrainFuckCompiler
 
-Simple Brainfuck interpreter writen on C#.
+Simple Brainfuck interpreter written on C#.
