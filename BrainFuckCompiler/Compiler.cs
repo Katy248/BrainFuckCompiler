@@ -48,7 +48,7 @@ internal class Compiler
     /// <param name="sourceCode">Brainfuck source code.</param>
     public void Compile(string sourceCode)
     {
-        TextIdentificate(sourceCode);
+        TextValidate(sourceCode);
 
         Array = InitializeArray(ArrayLength);
         currentElementIndex = 0;
@@ -113,23 +113,26 @@ internal class Compiler
     /// </summary>
     /// <param name="code">Brainfuck source code.</param>
     /// <exception cref="CompilerException"></exception>
-    private void TextIdentificate(string code)
+    private void TextValidate(string code)
     {
-        (int cycleStart, int cycleEnd) = (0, 0);
+        var stack = new Stack<char>();
+        
         for (int i = 0; i < code.Length; i++)
         {
-            switch ((Commands)code[i])
+            switch (code[i])
             {
-                case Commands.WhileStart:
-                    cycleStart++;
+                case (char)Commands.WhileStart:
+                    stack.Push(code[i]);
                     break;
-                case Commands.WhileEnd:
-                    cycleEnd++;
+                case (char)Commands.WhileEnd:
+                    if (stack.Count == 0)
+                        throw new CompilerException("Cycle was not opened before closing.");
+                    stack.Pop();
                     break;
             }
-            if (cycleEnd > cycleStart) throw new CompilerException("Cycle was not opened before closeing.");
         }
-        if (cycleEnd < cycleStart) throw new CompilerException("Cycle was not closed.");
+        if (stack.Count > 0) 
+            throw new CompilerException("Cycle was not closed.");
     }
     /// <summary>
     /// Represents list of Brainfuck commands.
