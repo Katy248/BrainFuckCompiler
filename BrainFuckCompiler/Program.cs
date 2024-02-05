@@ -1,38 +1,32 @@
-﻿using System.Reflection;
-using BrainFuckCompiler;
+﻿using BrainFuckCompiler;
+using System.CommandLine;
+using System.ComponentModel;
+using System.Reflection;
 
-const string Help = "\nUse: [filename] [array-length]";
+var fileArg = new Argument<FileInfo>("file", description: "File with source code to run");
+var arrayLengthArg = new Argument<uint>("array length", description: "Length of array", getDefaultValue: () => 3000);
 
-if (args.Length == 0)
+var root = new RootCommand("BrainFuckCompiler is not a real compiler but an interpreter for brainfuck language")
 {
-    Console.WriteLine($"{Assembly.GetExecutingAssembly().GetName().Name} {Assembly.GetExecutingAssembly().GetName().Version}");
-    Console.WriteLine(Help);
-    return;
-}
-
-
-try
+    fileArg, arrayLengthArg
+};
+root.SetHandler((file, arrayLength) =>
 {
-    string sourceCode = File.ReadAllText(args[0]);
-    int length = ParseLength();
+    try
+    {
+        var sourceCode = File.ReadAllText(file.FullName);
+        var compiler = new Compiler(Console.OpenStandardInput(), Console.OpenStandardOutput(), (int)arrayLength);
+        compiler.Compile(sourceCode);
+    }
+    catch(CompilerException ce)
+    {
+        Console.Error.WriteLine($"BFCompiler error: {ce.Message}");
+    }
+    catch (Exception e)
+    {
+        Console.Error.WriteLine(e.Message);
+        throw;
+    }
+}, fileArg, arrayLengthArg);
 
-    var compiler = new Compiler(Console.OpenStandardInput(), Console.OpenStandardOutput(), length);
-    compiler.Compile(sourceCode);
-}
-catch(CompilerException ce)
-{
-    Console.WriteLine($"BFCompiler error: {ce.Message}");
-}
-catch (Exception ex)
-{
-    Console.WriteLine(ex.Message);
-}
-
-
-int ParseLength()
-{
-    if (args.Length>1)
-        if (int.TryParse(args[1], out int result))
-            return result;
-    return 3000;
-}
+await root.InvokeAsync(args);
