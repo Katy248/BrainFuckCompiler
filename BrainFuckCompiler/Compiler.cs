@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.IO;
+using System.Reflection;
+using System.Reflection.Emit;
 
 using static System.Net.Mime.MediaTypeNames;
 using static System.Runtime.InteropServices.JavaScript.JSType;
@@ -31,7 +34,7 @@ internal class Compiler
         get => arrayLength;
         private set => arrayLength = (value > 0) ? value : 3000;
     }
-    
+
     /// <summary>
     /// Input compiler stream.
     /// </summary>
@@ -42,27 +45,51 @@ internal class Compiler
     private Stream _output;
     private int currentElementIndex;
     private int arrayLength;
+
+    private class OutputInfo
+    {
+        public string Name { get; init; }
+        public FileInfo OutputFile { get; init; }
+
+        public static OutputInfo FromFile(FileInfo outputFile)
+        {
+            return new OutputInfo
+            {
+                OutputFile = outputFile,
+                Name = outputFile.Name
+            };
+        }
+    }
+    /* private ILGenerator GetGenerator(OutputInfo info)
+    {
+        var assemblyName = new AssemblyName(info.Name);
+        var domain = System.Threading.Thread.GetDomain();
+        var assemblyBuilder = domain.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndSave);
+        var moduleBuilder = assemblyBuilder.DefineDynamicModule(info.OutputFile.FullName, true);
+        var typeBuilder = moduleBuilder.DefineType("Program", TypeAttributes.Public | TypeAttributes.Class);
+        var methodBuilder = typeBuilder.DefineMethod("Main", MethodAttributes.HideBySig | MethodAttributes.Static | MethodAttributes.Public, typeof(Object), new Type[] { });
+
+        return methodBuilder.GetIlGenerator();
+    } */
+
     /// <summary>
     /// Compiles source code uses initialized streams.
     /// </summary>
     /// <param name="sourceCode">Brainfuck source code.</param>
-    public void Compile(string sourceCode)
+    /* public void Compile(Stream sourceCode)
     {
         TextValidate(sourceCode);
 
         Array = InitializeArray(ArrayLength);
         currentElementIndex = 0;
 
-        InterpretBySym(sourceCode);
-    }
-    /// <summary>
-    /// Interprets every symbols.
-    /// </summary>
-    /// <param name="symbols"></param>
-    private void InterpretBySym(string symbols)
-    {
-        for (int symNum = 0; symNum < symbols.Length; symNum++)
-            switch ((Commands)symbols[symNum])
+        var parser = new Parser();
+        var il = GetGenerator(OutputInfo.FromFile("out.dll"));
+
+        foreach (var command in parser.Parse(sourceCode))
+        {
+
+            switch (command)
             {
                 case Commands.Next:
                     if (currentElementIndex < Array.Length - 1) currentElementIndex++;
@@ -86,11 +113,11 @@ internal class Compiler
                     if (Array[currentElementIndex] == 0)
                     {
                         int cycleEnds = 1;
-                        while (cycleEnds > 0 && symNum < symbols.Length)
+                        while (cycleEnds > 0 && i < commands.Length)
                         {
-                            symNum++;
-                            if (symbols[symNum] == (char)Commands.WhileEnd) cycleEnds--;
-                            if (symbols[symNum] == (char)Commands.WhileStart) cycleEnds++;
+                            i++;
+                            if (commands[i] == Commands.WhileEnd) cycleEnds--;
+                            if (commands[i] == Commands.WhileStart) cycleEnds++;
                         }
                     }
                     break;
@@ -98,16 +125,84 @@ internal class Compiler
                     if (Array[currentElementIndex] > 0)
                     {
                         int cycleStarts = 1;
-                        while (cycleStarts > 0 && symNum >= 0)
+                        while (cycleStarts > 0 && i >= 0)
                         {
-                            symNum--;
-                            if (symbols[symNum] == (char)Commands.WhileEnd) cycleStarts++;
-                            if (symbols[symNum] == (char)Commands.WhileStart) cycleStarts--;
+                            i--;
+                            if (commands[i] == Commands.WhileEnd) cycleStarts++;
+                            if (commands[i] == Commands.WhileStart) cycleStarts--;
                         }
                     }
                     break;
             }
+
+        }
+        il.Emit(OpCode.Ret);
+    } */
+    /// <summary>
+    /// Interprets every symbols.
+    /// </summary>
+    /// <param name="sourceCode"></param>
+    public void Interpret(Stream sourceCode)
+    {
+        //TextValidate(sourceCode);
+
+        Array = InitializeArray(ArrayLength);
+        currentElementIndex = 0;
+
+        var parser = new Parser();
+
+        var commands = parser.Parse(sourceCode).ToArray();
+        for (uint i = 0; i < commands.Length; i++)
+        {
+            var symbol = commands[i];
+            switch (symbol)
+            {
+                case Commands.Next:
+                    if (currentElementIndex < Array.Length - 1) currentElementIndex++;
+                    break;
+                case Commands.Previous:
+                    if (currentElementIndex > 0) currentElementIndex--;
+                    break;
+                case Commands.Plus:
+                    if (Array[currentElementIndex] < MaxElementSize) Array[currentElementIndex]++;
+                    break;
+                case Commands.Minus:
+                    if (Array[currentElementIndex] > MinElementSize) Array[currentElementIndex]--;
+                    break;
+                case Commands.Out:
+                    _output.WriteByte((byte)Array[currentElementIndex]);
+                    break;
+                case Commands.In:
+                    Array[currentElementIndex] = _input.ReadByte();
+                    break;
+                case Commands.WhileStart:
+                    if (Array[currentElementIndex] == 0)
+                    {
+                        int cycleEnds = 1;
+                        while (cycleEnds > 0 && i < commands.Length)
+                        {
+                            i++;
+                            if (commands[i] == Commands.WhileEnd) cycleEnds--;
+                            if (commands[i] == Commands.WhileStart) cycleEnds++;
+                        }
+                    }
+                    break;
+                case Commands.WhileEnd:
+                    if (Array[currentElementIndex] > 0)
+                    {
+                        int cycleStarts = 1;
+                        while (cycleStarts > 0 && i >= 0)
+                        {
+                            i--;
+                            if (commands[i] == Commands.WhileEnd) cycleStarts++;
+                            if (commands[i] == Commands.WhileStart) cycleStarts--;
+                        }
+                    }
+                    break;
+            }
+        }
     }
+
     /// <summary>
     /// Checks errors in code.
     /// </summary>
@@ -116,7 +211,7 @@ internal class Compiler
     private void TextValidate(string code)
     {
         var stack = new Stack<char>();
-        
+
         for (int i = 0; i < code.Length; i++)
         {
             switch (code[i])
@@ -131,23 +226,10 @@ internal class Compiler
                     break;
             }
         }
-        if (stack.Count > 0) 
+        if (stack.Count > 0)
             throw new CompilerException("Cycle was not closed.");
     }
-    /// <summary>
-    /// Represents list of Brainfuck commands.
-    /// </summary>
-    private enum Commands
-    {
-        Next = '>',
-        Previous = '<',
-        Plus = '+',
-        Minus = '-',
-        Out = '.',
-        In = ',',
-        WhileStart = '[',
-        WhileEnd = ']',
-    }
+
     /// <summary>
     /// Initialize empty <see cref="Array{int}"/> of int with specified length.
     /// </summary>
