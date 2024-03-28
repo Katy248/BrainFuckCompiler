@@ -1,6 +1,6 @@
-# Brainfuck to Il
+# BrainFuck to IL
 
-Program start:
+## Program start
 
 ```il
 .locals init ([0] int32 index, [1] int32[] array) // allocate index, should be zero by default
@@ -9,7 +9,7 @@ newarr int32 // allocate array
 stlock.1 // move array to its variable
 ```
 
-Increment `+`:
+## Increment `+`
 
 ```il
 ldloc.1 // allocate array
@@ -22,7 +22,7 @@ add // increment
 stelem.i4 // move stack value to array[index]
 ```
 
-Decrement `-`:
+## Decrement `-`
 
 ```il
 ldloc.1 // allocate array
@@ -35,7 +35,7 @@ sub // decrement
 stelem.i4 // move stack value to array[index]
 ```
 
-Next `>`:
+## Next `>`
 
 ```il
 ldloc.0 // load index variable to stack
@@ -44,7 +44,7 @@ add // increment
 stloc.0 // load stack value to index variable
 ```
 
-Previous `<`:
+## Previous `<`
 
 ```il
 ldloc.0 // load index variable to stack
@@ -53,7 +53,7 @@ sub // decrement
 stloc.0 // load stack value to index variable
 ```
 
-Input `,`:
+## Input `,`
 
 ```il
 ldloc.1 // allocate array
@@ -62,7 +62,7 @@ call int32 [System.Console]System.Console::Read() // read from console
 stelem.i4 // move stack value to array[index]
 ```
 
-Output `.`:
+## Output `.`
 
 ```il
 ldloc.1 // allocate array
@@ -71,7 +71,7 @@ ldelema // array[index] pointer to stack
 call void [System.Console]System.Console::Write(int32) // write to console
 ```
 
-Start loop `[`:
+## Start loop `[`
 
 ```il
 START_LOOP_$X:
@@ -84,7 +84,7 @@ beq.s END_LOOP_$X //if current value is 0 end loop
 
 Where `$X` is index of loop in all program
 
-End loop `]`:
+## End loop `]`
 
 ```il
 br.s START_LOOP_$X
