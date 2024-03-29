@@ -38,7 +38,22 @@ interpretCommand.SetHandler((file, arrayLength) =>
 
 compileCommand.SetHandler((file, arrayLength, output) =>
 {
-
+    try
+    {
+        using var sourceCode = File.Open(file.FullName, FileMode.Open);
+        var compiler = new Compiler(Console.OpenStandardInput(), Console.OpenStandardOutput(), (int)arrayLength);
+        compiler.Compile(sourceCode, OutputInfo.FromFile(output));
+    }
+    catch (CompilerException ce)
+    {
+        Console.Error.WriteLine($"BFCompiler error: {ce.Message}");
+    }
+    catch (Exception e)
+    {
+        Console.Error.WriteLine("Internal error");
+        Console.Error.WriteLine(e.Message);
+        throw;
+    }
 }, fileArg, arrayLengthArg, outputOption);
 
 await root.InvokeAsync(args);

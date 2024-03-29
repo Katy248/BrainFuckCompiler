@@ -11,6 +11,20 @@ using static System.Net.Mime.MediaTypeNames;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace BrainFuckCompiler;
+public class OutputInfo
+{
+    public string Name { get; init; }
+    public FileInfo OutputFile { get; init; }
+
+    public static OutputInfo FromFile(FileInfo outputFile)
+    {
+        return new OutputInfo
+        {
+            OutputFile = outputFile,
+            Name = outputFile.Name
+        };
+    }
+}
 internal class Compiler
 {
     const int MaxElementSize = int.MaxValue;
@@ -46,28 +60,10 @@ internal class Compiler
     private int currentElementIndex;
     private int arrayLength;
 
-    private class OutputInfo
-    {
-        public string Name { get; init; }
-        public FileInfo OutputFile { get; init; }
 
-        public static OutputInfo FromFile(FileInfo outputFile)
-        {
-            return new OutputInfo
-            {
-                OutputFile = outputFile,
-                Name = outputFile.Name
-            };
-        }
-    }
     /* private ILGenerator GetGenerator(OutputInfo info)
     {
-        var assemblyName = new AssemblyName(info.Name);
-        var domain = System.Threading.Thread.GetDomain();
-        var assemblyBuilder = domain.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndSave);
-        var moduleBuilder = assemblyBuilder.DefineDynamicModule(info.OutputFile.FullName, true);
-        var typeBuilder = moduleBuilder.DefineType("Program", TypeAttributes.Public | TypeAttributes.Class);
-        var methodBuilder = typeBuilder.DefineMethod("Main", MethodAttributes.HideBySig | MethodAttributes.Static | MethodAttributes.Public, typeof(Object), new Type[] { });
+        
 
         return methodBuilder.GetIlGenerator();
     } */
@@ -76,17 +72,26 @@ internal class Compiler
     /// Compiles source code uses initialized streams.
     /// </summary>
     /// <param name="sourceCode">Brainfuck source code.</param>
-    /* public void Compile(Stream sourceCode)
+    public void Compile(Stream sourceCode, OutputInfo outputInfo)
     {
-        TextValidate(sourceCode);
+        var assemblyName = new AssemblyName(outputInfo.Name);
+        var domain = System.Threading.Thread.GetDomain();
+        var assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndCollect);
+        var moduleBuilder = assemblyBuilder.DefineDynamicModule(outputInfo.OutputFile.FullName);
+        var typeBuilder = moduleBuilder.DefineType("Program", TypeAttributes.Public | TypeAttributes.Class);
+        var methodBuilder = typeBuilder.DefineMethod("Main", MethodAttributes.HideBySig | MethodAttributes.Static | MethodAttributes.Public, typeof(object), new Type[] { });
 
-        Array = InitializeArray(ArrayLength);
-        currentElementIndex = 0;
+        Emit(sourceCode, methodBuilder.GetILGenerator());
 
+        // var type = typeBuilder.CreateType();
+        assemblyBuilder.Save(outputInfo.OutputFile);
+
+    }
+    public void Emit(Stream sourceCode, ILGenerator il)
+    {
         var parser = new Parser();
-        var il = GetGenerator(OutputInfo.FromFile("out.dll"));
 
-        foreach (var command in parser.Parse(sourceCode))
+        /* foreach (var command in parser.Parse(sourceCode))
         {
 
             switch (command)
@@ -135,9 +140,12 @@ internal class Compiler
                     break;
             }
 
-        }
-        il.Emit(OpCode.Ret);
-    } */
+        } */
+        il.Emit(OpCodes.Ldc_I4_S, 2);
+        il.Emit(OpCodes.Call, typeof(Console).GetMethod(
+            "Write", new Type[] { typeof(int) }));
+        il.Emit(OpCodes.Ret);
+    }
     /// <summary>
     /// Interprets every symbols.
     /// </summary>
