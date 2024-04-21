@@ -1,14 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.IO;
-using System.Reflection;
+﻿using System.Reflection;
 using System.Reflection.Emit;
-
-using static System.Net.Mime.MediaTypeNames;
-using static System.Runtime.InteropServices.JavaScript.JSType;
+using Lokad.ILPack;
 
 namespace BrainFuckCompiler;
 public class OutputInfo
@@ -75,75 +67,100 @@ internal class Compiler
     public void Compile(Stream sourceCode, OutputInfo outputInfo)
     {
         var assemblyName = new AssemblyName(outputInfo.Name);
-        var domain = System.Threading.Thread.GetDomain();
         var assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndCollect);
-        var moduleBuilder = assemblyBuilder.DefineDynamicModule(outputInfo.OutputFile.FullName);
-        var typeBuilder = moduleBuilder.DefineType("Program", TypeAttributes.Public | TypeAttributes.Class);
-        var methodBuilder = typeBuilder.DefineMethod("Main", MethodAttributes.HideBySig | MethodAttributes.Static | MethodAttributes.Public, typeof(object), new Type[] { });
+        var moduleBuilder = assemblyBuilder.DefineDynamicModule("MainModule");
+        var typeBuilder = moduleBuilder.DefineType("Program", TypeAttributes.AutoClass | TypeAttributes.Public | TypeAttributes.Class | TypeAttributes.Sealed);
+        var methodBuilder = typeBuilder.DefineMethod("Main", MethodAttributes.Static | MethodAttributes.Public, typeof(int), new Type[] { });
 
         Emit(sourceCode, methodBuilder.GetILGenerator());
-
-        // var type = typeBuilder.CreateType();
-        assemblyBuilder.Save(outputInfo.OutputFile);
-
+        typeBuilder.CreateTypeInfo();
+        
+        var generator = new AssemblyGenerator();
+        var bytes= generator.GenerateAssemblyBytes(assemblyBuilder, [Assembly.Load(new AssemblyName("System"))]);
     }
-    public void Emit(Stream sourceCode, ILGenerator il)
+    public static void Emit(Stream sourceCode, ILGenerator il)
     {
+        var loops = new Stack<int>();
+        il.EmitWriteLine(".locals init ([0] int32 index, [1] int32[] array)");
+        il.Emit(OpCodes.Ldc_I4_1, 3000);
+        il.Emit(OpCodes.Newarr, typeof(int));
+        il.Emit(OpCodes.Stloc_1);
+
         var parser = new Parser();
 
-        /* foreach (var command in parser.Parse(sourceCode))
+        foreach (var command in parser.Parse(sourceCode))
         {
 
             switch (command)
             {
                 case Commands.Next:
-                    if (currentElementIndex < Array.Length - 1) currentElementIndex++;
+                    il.Emit(OpCodes.Ldloc_0);
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    il.Emit(OpCodes.Add);
+                    il.Emit(OpCodes.Stloc_0);
                     break;
                 case Commands.Previous:
-                    if (currentElementIndex > 0) currentElementIndex--;
+                    il.Emit(OpCodes.Ldloc_0);
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    il.Emit(OpCodes.Sub);
+                    il.Emit(OpCodes.Stloc_0);
                     break;
                 case Commands.Plus:
-                    if (Array[currentElementIndex] < MaxElementSize) Array[currentElementIndex]++;
+                    il.Emit(OpCodes.Ldloc_1);
+                    il.Emit(OpCodes.Ldloc_0);
+                    il.Emit(OpCodes.Ldloc_1);
+                    il.Emit(OpCodes.Ldloc_0);
+                    il.Emit(OpCodes.Ldelema);
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    il.Emit(OpCodes.Add);
+                    il.Emit(OpCodes.Stelem_I4);
                     break;
                 case Commands.Minus:
-                    if (Array[currentElementIndex] > MinElementSize) Array[currentElementIndex]--;
+                    il.Emit(OpCodes.Ldloc_1);
+                    il.Emit(OpCodes.Ldloc_0);
+                    il.Emit(OpCodes.Ldloc_1);
+                    il.Emit(OpCodes.Ldloc_0);
+                    il.Emit(OpCodes.Ldelema);
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    il.Emit(OpCodes.Sub);
+                    il.Emit(OpCodes.Stelem_I4);
                     break;
                 case Commands.Out:
-                    _output.WriteByte((byte)Array[currentElementIndex]);
+                    il.Emit(OpCodes.Ldloc_1);
+                    il.Emit(OpCodes.Ldloc_0);
+                    il.Emit(OpCodes.Ldelema);
+                    il.EmitWriteLine("call void [System.Console]System.Console::Write(int32)");
                     break;
                 case Commands.In:
-                    Array[currentElementIndex] = _input.ReadByte();
+                    il.Emit(OpCodes.Ldloc_1);
+                    il.Emit(OpCodes.Ldloc_0);
+                    il.EmitWriteLine("call int32 [System.Console]System.Console::Read()");
+                    il.Emit(OpCodes.Stelem_I4);
                     break;
                 case Commands.WhileStart:
-                    if (Array[currentElementIndex] == 0)
-                    {
-                        int cycleEnds = 1;
-                        while (cycleEnds > 0 && i < commands.Length)
-                        {
-                            i++;
-                            if (commands[i] == Commands.WhileEnd) cycleEnds--;
-                            if (commands[i] == Commands.WhileStart) cycleEnds++;
-                        }
-                    }
+                    loops.Push(loops.Count);
+
+                    il.EmitWriteLine($"START_LOOP_{loops.Peek()}:");
+                    il.Emit(OpCodes.Ldloc_1);
+                    il.Emit(OpCodes.Ldloc_0);
+                    il.Emit(OpCodes.Ldelema);
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Beq_S, $"END_LOOP_{loops.Peek()}");
                     break;
                 case Commands.WhileEnd:
-                    if (Array[currentElementIndex] > 0)
-                    {
-                        int cycleStarts = 1;
-                        while (cycleStarts > 0 && i >= 0)
-                        {
-                            i--;
-                            if (commands[i] == Commands.WhileEnd) cycleStarts++;
-                            if (commands[i] == Commands.WhileStart) cycleStarts--;
-                        }
-                    }
+                    il.Emit(OpCodes.Br_S, $"START_LOOP_{loops.Peek()}");
+                    il.EmitWriteLine($"END_LOOP_{loops.Pop()}:");
+
                     break;
             }
 
-        } */
+
+        }
+        /*
         il.Emit(OpCodes.Ldc_I4_S, 2);
-        il.Emit(OpCodes.Call, typeof(Console).GetMethod(
-            "Write", new Type[] { typeof(int) }));
+        il.Emit(OpCodes.Call, typeof(Console).GetMethod("Write", new Type[] { typeof(int) }));
+        */
+        il.Emit(OpCodes.Ldc_I4_0);
         il.Emit(OpCodes.Ret);
     }
     /// <summary>
@@ -166,16 +183,20 @@ internal class Compiler
             switch (symbol)
             {
                 case Commands.Next:
-                    if (currentElementIndex < Array.Length - 1) currentElementIndex++;
+                    if (currentElementIndex < Array.Length - 1)
+                        currentElementIndex++;
                     break;
                 case Commands.Previous:
-                    if (currentElementIndex > 0) currentElementIndex--;
+                    if (currentElementIndex > 0)
+                        currentElementIndex--;
                     break;
                 case Commands.Plus:
-                    if (Array[currentElementIndex] < MaxElementSize) Array[currentElementIndex]++;
+                    if (Array[currentElementIndex] < MaxElementSize)
+                        Array[currentElementIndex]++;
                     break;
                 case Commands.Minus:
-                    if (Array[currentElementIndex] > MinElementSize) Array[currentElementIndex]--;
+                    if (Array[currentElementIndex] > MinElementSize)
+                        Array[currentElementIndex]--;
                     break;
                 case Commands.Out:
                     _output.WriteByte((byte)Array[currentElementIndex]);
@@ -190,8 +211,10 @@ internal class Compiler
                         while (cycleEnds > 0 && i < commands.Length)
                         {
                             i++;
-                            if (commands[i] == Commands.WhileEnd) cycleEnds--;
-                            if (commands[i] == Commands.WhileStart) cycleEnds++;
+                            if (commands[i] == Commands.WhileEnd)
+                                cycleEnds--;
+                            if (commands[i] == Commands.WhileStart)
+                                cycleEnds++;
                         }
                     }
                     break;
@@ -202,8 +225,10 @@ internal class Compiler
                         while (cycleStarts > 0 && i >= 0)
                         {
                             i--;
-                            if (commands[i] == Commands.WhileEnd) cycleStarts++;
-                            if (commands[i] == Commands.WhileStart) cycleStarts--;
+                            if (commands[i] == Commands.WhileEnd)
+                                cycleStarts++;
+                            if (commands[i] == Commands.WhileStart)
+                                cycleStarts--;
                         }
                     }
                     break;
